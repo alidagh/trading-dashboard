@@ -1,7 +1,4 @@
-import {
-  HistoricalPricePoint,
-  Ticker,
-} from '@trading-dashboard/contracts';
+import { HistoricalPricePoint, Ticker } from '@trading-dashboard/contracts';
 
 const HISTORY_LENGTH = 120;
 const ONE_MINUTE = 60 * 1000;
@@ -28,8 +25,7 @@ export function buildHistory(
     const remaining = HISTORY_LENGTH - 1 - i;
 
     let close =
-      ticker.lastPrice +
-      Math.sin((i + ticker.symbol.length) / 8) * volatility;
+      ticker.lastPrice + Math.sin((i + ticker.symbol.length) / 8) * volatility;
 
     // Keep the final point in sync with the current ticker price
     if (i === HISTORY_LENGTH - 1) {
@@ -49,9 +45,7 @@ export function buildHistory(
       high: roundPrice(high),
       low: roundPrice(low),
       close: roundPrice(close),
-      volume: Math.round(
-        1000 + Math.abs(Math.sin(i / 4)) * 500,
-      ),
+      volume: Math.round(1000 + Math.abs(Math.sin(i / 4)) * 500),
     });
 
     previousClose = close;
@@ -59,3 +53,4 @@ export function buildHistory(
 
   return history;
 }
+
