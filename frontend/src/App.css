@@ -182,3 +182,108 @@
     max-width: 9rem;
   }
 }
+
+.account {
+  display: flex;
+  flex-direction: column;
+  margin-left: auto;
+  line-height: 1.15;
+  text-align: right;
+}
+
+.account-name {
+  font-size: 0.85rem;
+}
+
+.account-role {
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+
+.sign-out {
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.sign-out:hover {
+  color: var(--text);
+  border-color: #2b374a;
+}
+
+.login {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 1rem;
+}
+
+.login-card {
+  display: flex;
+  flex-direction: column;
+  width: min(22rem, 100%);
+  padding: 1.6rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+}
+
+.login-card h1 {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+
+.login-hint {
+  margin: 0.3rem 0 1.2rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.login-card label {
+  margin-bottom: 0.3rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.login-card input {
+  margin-bottom: 0.9rem;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #0b1017;
+  color: var(--text);
+  font: inherit;
+}
+
+.login-card input:focus {
+  outline: none;
+  border-color: var(--up);
+}
+
+.login-card button {
+  margin-top: 0.4rem;
+  padding: 0.55rem;
+  border: 0;
+  border-radius: 6px;
+  background: var(--up);
+  color: #06210f;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.login-card button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.login-error {
+  margin: 0 0 0.6rem;
+  color: var(--down);
+  font-size: 0.78rem;
+}

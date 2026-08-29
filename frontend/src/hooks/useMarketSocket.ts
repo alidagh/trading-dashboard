@@ -7,6 +7,7 @@ import type {
   ServerToClientEvents,
 } from '@trading-dashboard/contracts'
 import { API_URL } from '../api/client'
+import { clearSession, getToken } from '../api/session'
 
 type MarketSocket = Socket<ServerToClientEvents, ClientToServerEvents>
 
@@ -15,9 +16,13 @@ export function useMarketSocket(symbol: string | null) {
   const watchedSymbol = useRef(symbol)
   const [prices, setPrices] = useState<Record<string, PriceUpdate>>({})
   const [connected, setConnected] = useState(false)
+  const [rejected, setRejected] = useState(false)
 
   useEffect(() => {
-    const socket: MarketSocket = io(API_URL, { transports: ['websocket'] })
+    const socket: MarketSocket = io(API_URL, {
+      transports: ['websocket'],
+      auth: { token: getToken() },
+    })
     socketRef.current = socket
 
     socket.on('connect', () => {
@@ -29,8 +34,14 @@ export function useMarketSocket(symbol: string | null) {
       }
     })
 
-    // TODO: handle auth-related server disconnects; Socket.IO won't retry them automtically.
-    socket.on('disconnect', () => setConnected(false))
+    socket.on('disconnect', (reason) => {
+      setConnected(false)
+
+      if (reason === 'io server disconnect') {
+        clearSession()
+        setRejected(true)
+      }
+    })
 
     socket.on(MARKET_EVENTS.priceUpdate, (tick) => {
       console.log('tick', tick)
@@ -60,5 +71,5 @@ export function useMarketSocket(symbol: string | null) {
     }
   }, [symbol])
 
-  return { prices, connected }
+  return { prices, connected, rejected }
 }
