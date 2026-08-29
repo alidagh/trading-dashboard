@@ -1,0 +1,19 @@
+{
+  "name": "trading-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Real-time trading dashboard - NestJS market data service and React dashboard",
+  "workspaces": [
+    "contracts",
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
