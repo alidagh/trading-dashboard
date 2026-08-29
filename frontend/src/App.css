@@ -80,3 +80,23 @@
 .ticker-row .price {
   font-variant-numeric: tabular-nums;
 }
+
+.dashboard {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 1rem;
+  align-items: start;
+}
+
+.chart {
+  border: 1px solid #222a38;
+  border-radius: 8px;
+  padding: 0.9rem 0.6rem 0.6rem;
+  background: #0d121b;
+}
+
+.chart h2 {
+  margin: 0 0 0.6rem;
+  font-size: 1rem;
+  letter-spacing: 0.02em;
+}

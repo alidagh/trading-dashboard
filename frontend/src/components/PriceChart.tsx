@@ -1,0 +1,188 @@
+import { useEffect, useState } from 'react'
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  ReferenceDot,
+  ReferenceLine,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts'
+import type { PriceUpdate } from '@trading-dashboard/contracts'
+import { fetchHistory } from '../api/market'
+
+const MAX_POINTS = 180
+
+const LINE_START = '#35c46b'
+const LINE_END = '#4fd1e0'
+
+type ChartPoint = {
+  timestamp: number
+  price: number
+}
+
+type Props = {
+  symbol: string | null
+  tick: PriceUpdate | undefined
+}
+
+const clockTime = (timestamp: number) =>
+  new Date(timestamp).toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+
+export function PriceChart({ symbol, tick }: Props) {
+  const [series, setSeries] = useState<ChartPoint[]>([])
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (!symbol) {
+      return
+    }
+
+    let cancelled = false
+    setLoading(true)
+
+    fetchHistory(symbol)
+      .then((history) => {
+        if (cancelled) {
+          return
+        }
+        setSeries(
+          history.points.map((candle) => ({
+            timestamp: candle.timestamp,
+            price: candle.close,
+          })),
+        )
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSeries([])
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [symbol])
+
+  useEffect(() => {
+    if (!tick || tick.symbol !== symbol) {
+      return
+    }
+
+    setSeries((current) => {
+      if (current.at(-1)?.timestamp === tick.timestamp) {
+        return current
+      }
+
+      const next = [...current, { timestamp: tick.timestamp, price: tick.price }]
+      return next.slice(-MAX_POINTS)
+    })
+  }, [tick, symbol])
+
+  if (!symbol) {
+    return <p className="panel-note">Pick a ticker to see its chart</p>
+  }
+
+  if (loading && series.length === 0) {
+    return <p className="panel-note">Loading {symbol}</p>
+  }
+
+  const openPrice = series[0]?.price
+  const latest = series.at(-1)
+
+  return (
+    <div className="chart">
+      <h2>{symbol}</h2>
+      <ResponsiveContainer width="100%" height={320}>
+        <AreaChart data={series} margin={{ top: 12, right: 8, bottom: 0, left: 8 }}>
+          <defs>
+            <linearGradient id="priceLine" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stopColor={LINE_START} />
+              <stop offset="100%" stopColor={LINE_END} />
+            </linearGradient>
+            <linearGradient id="priceFill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={LINE_START} stopOpacity={0.28} />
+              <stop offset="100%" stopColor={LINE_START} stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid stroke="#1b2230" strokeDasharray="2 4" vertical={false} />
+          <XAxis
+            dataKey="timestamp"
+            type="number"
+            scale="time"
+            domain={['dataMin', 'dataMax']}
+            tickFormatter={clockTime}
+            minTickGap={28}
+            axisLine={false}
+            tickLine={false}
+            stroke="#6b7688"
+            fontSize={11}
+          />
+          <YAxis
+            orientation="right"
+            domain={['auto', 'auto']}
+            tickFormatter={(price: number) => price.toFixed(2)}
+            width={64}
+            axisLine={false}
+            tickLine={false}
+            stroke="#6b7688"
+            fontSize={11}
+          />
+          <Tooltip
+            labelFormatter={(label) => clockTime(Number(label))}
+            formatter={(price) => [Number(price).toFixed(2), 'Price']}
+            cursor={{ stroke: '#2a3446', strokeDasharray: '3 3' }}
+            contentStyle={{
+              background: '#151b26',
+              border: '1px solid #222a38',
+              borderRadius: 6,
+            }}
+          />
+          {openPrice !== undefined && (
+            <ReferenceLine
+              y={openPrice}
+              stroke="#3d4759"
+              strokeDasharray="4 4"
+              label={{
+                value: 'open',
+                position: 'insideLeft',
+                fill: '#6b7688',
+                fontSize: 11,
+              }}
+            />
+          )}
+          <Area
+            type="linear"
+            dataKey="price"
+            stroke="url(#priceLine)"
+            strokeWidth={1.6}
+            fill="url(#priceFill)"
+            dot={false}
+            activeDot={{ r: 4, fill: LINE_START, stroke: '#10141c', strokeWidth: 2 }}
+            isAnimationActive={false}
+          />
+          {latest && (
+            <ReferenceDot
+              x={latest.timestamp}
+              y={latest.price}
+              r={3.5}
+              fill={LINE_START}
+              stroke="#10141c"
+              strokeWidth={2}
+            />
+          )}
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
+  )
+}

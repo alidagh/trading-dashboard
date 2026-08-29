@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { PriceChart } from './components/PriceChart'
 import { TickerListPanel } from './components/TickerListPanel'
 import { useMarketSocket } from './hooks/useMarketSocket'
 import './App.css'
@@ -16,11 +17,17 @@ function App() {
         </span>
       </header>
 
-      <TickerListPanel
-        selected={selected}
-        prices={prices}
-        onSelect={setSelected}
-      />
+      <div className="dashboard">
+        <TickerListPanel
+          selected={selected}
+          prices={prices}
+          onSelect={setSelected}
+        />
+        <PriceChart
+          symbol={selected}
+          tick={selected ? prices[selected] : undefined}
+        />
+      </div>
     </div>
   )
 }
