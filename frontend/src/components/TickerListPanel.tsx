@@ -16,6 +16,16 @@ function formatPrice(price: number, currency: string) {
   }).format(price)
 }
 
+function moveSinceOpen(live: number, open: number) {
+  const percent = open === 0 ? 0 : ((live - open) / open) * 100
+  const direction = live > open ? 'up' : live < open ? 'down' : 'flat'
+
+  return {
+    direction,
+    label: `${percent >= 0 ? '+' : '-'}${percent.toFixed(2)}%`,
+  }
+}
+
 export function TickerListPanel({
   tickers,
   loading,
@@ -35,7 +45,8 @@ export function TickerListPanel({
   return (
     <ul className="ticker-list">
       {tickers.map((ticker) => {
-        const tick = prices[ticker.symbol]
+        const live = prices[ticker.symbol]?.price ?? ticker.lastPrice
+        const move = moveSinceOpen(live, ticker.lastPrice)
 
         return (
           <li key={ticker.symbol}>
@@ -46,10 +57,15 @@ export function TickerListPanel({
               }
               onClick={() => onSelect(ticker.symbol)}
             >
-              <span className="symbol">{ticker.symbol}</span>
-              <span className="name">{ticker.name}</span>
-              <span className="price">
-                {formatPrice(tick?.price ?? ticker.lastPrice, ticker.currency)}
+              <span className="ticker-id">
+                <span className="symbol">{ticker.symbol}</span>
+                <span className="name">{ticker.name}</span>
+              </span>
+              <span className="ticker-quote">
+                <span className="price">
+                  {formatPrice(live, ticker.currency)}
+                </span>
+                <span className={`change ${move.direction}`}>{move.label}</span>
               </span>
             </button>
           </li>
