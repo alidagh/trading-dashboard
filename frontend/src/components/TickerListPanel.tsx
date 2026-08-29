@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
 import type { PriceUpdate, Ticker } from '@trading-dashboard/contracts'
-import { fetchTickers } from '../api/market'
 
 type Props = {
+  tickers: Ticker[]
+  loading: boolean
+  failed: boolean
   selected: string | null
   prices: Record<string, PriceUpdate>
   onSelect: (symbol: string) => void
@@ -15,36 +16,14 @@ function formatPrice(price: number, currency: string) {
   }).format(price)
 }
 
-export function TickerListPanel({ selected, prices, onSelect }: Props) {
-  const [tickers, setTickers] = useState<Ticker[]>([])
-  const [loading, setLoading] = useState(true)
-  const [failed, setFailed] = useState(false)
-
-  useEffect(() => {
-    let dropped = false
-
-    fetchTickers()
-      .then((rows) => {
-        if (!dropped) {
-          setTickers(rows)
-        }
-      })
-      .catch(() => {
-        if (!dropped) {
-          setFailed(true)
-        }
-      })
-      .finally(() => {
-        if (!dropped) {
-          setLoading(false)
-        }
-      })
-
-    return () => {
-      dropped = true
-    }
-  }, [])
-
+export function TickerListPanel({
+  tickers,
+  loading,
+  failed,
+  selected,
+  prices,
+  onSelect,
+}: Props) {
   if (loading) {
     return <p className="panel-note">Loading tickers</p>
   }
