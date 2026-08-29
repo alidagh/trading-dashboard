@@ -1,6 +1,7 @@
 import { Test } from '@nestjs/testing';
 import { MARKET_EVENTS } from '@trading-dashboard/contracts';
 import { Socket } from 'socket.io';
+import { AuthModule } from '../auth/auth.module';
 import { TickersService } from '../tickers/tickers.service';
 import { MarketDataGateway } from './market-data.gateway';
 
@@ -27,6 +28,7 @@ describe('MarketDataGateway', () => {
 
   beforeEach(async () => {
     const moduleRef = await Test.createTestingModule({
+      imports: [AuthModule],
       providers: [MarketDataGateway, TickersService],
     }).compile();
 
@@ -37,7 +39,7 @@ describe('MarketDataGateway', () => {
     server = { to: jest.fn().mockReturnValue({ emit: roomEmit }) };
     Reflect.set(gateway, 'server', server);
 
-    // ignore console.log during tests for now. 
+    // ignore console.log during tests for now.
     jest.spyOn(console, 'log').mockImplementation(() => undefined);
     jest.useFakeTimers();
   });

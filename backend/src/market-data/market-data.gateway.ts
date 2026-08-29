@@ -14,6 +14,7 @@ import type {
   SubscribePayload,
   UnsubscribePayload,
 } from '@trading-dashboard/contracts';
+import { AuthService } from '../auth/auth.service';
 import { TickersService } from '../tickers/tickers.service';
 
 const TICK_INTERVAL_MS = 2000;
@@ -31,10 +32,22 @@ export class MarketDataGateway
   // streams is a map between symbol to setInterval which emit events
   private readonly streams = new Map<string, NodeJS.Timeout>();
 
-  constructor(private readonly tickers: TickersService) {}
+  constructor(
+    private readonly tickers: TickersService,
+    private readonly auth: AuthService,
+  ) {}
 
   handleConnection(client: Socket): void {
-    console.log('[ws] connected', client.id);
+    const token = client.handshake.auth?.token as string | undefined;
+    const user = token ? this.auth.verify(token) : undefined;
+
+    if (!user) {
+      console.log('[ws] rejecting unauthenticated client', client.id);
+      client.disconnect();
+      return;
+    }
+
+    console.log(`[ws] connected ${client.id} as ${user.username}`);
   }
 
   @SubscribeMessage(MARKET_EVENTS.subscribe)
