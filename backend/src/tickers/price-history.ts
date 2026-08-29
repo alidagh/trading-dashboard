@@ -53,4 +53,3 @@ export function buildHistory(
 
   return history;
 }
-

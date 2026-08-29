@@ -2,6 +2,8 @@ import { Test } from '@nestjs/testing';
 import { MARKET_EVENTS } from '@trading-dashboard/contracts';
 import { Socket } from 'socket.io';
 import { AuthModule } from '../auth/auth.module';
+import { AuthService } from '../auth/auth.service';
+import { USER_SEED } from '../auth/user-seed';
 import { TickersService } from '../tickers/tickers.service';
 import { MarketDataGateway } from './market-data.gateway';
 
@@ -9,20 +11,24 @@ type ClientStub = Socket & {
   join: jest.Mock;
   leave: jest.Mock;
   emit: jest.Mock;
+  disconnect: jest.Mock;
 };
 
-function clientStub(id: string): ClientStub {
+function clientStub(id: string, token?: string): ClientStub {
   return {
     id,
+    handshake: { auth: token ? { token } : {} },
     join: jest.fn(),
     leave: jest.fn(),
     emit: jest.fn(),
+    disconnect: jest.fn(),
   } as unknown as ClientStub;
 }
 
 describe('MarketDataGateway', () => {
   let gateway: MarketDataGateway;
   let tickers: TickersService;
+  let auth: AuthService;
   let roomEmit: jest.Mock;
   let server: { to: jest.Mock };
 
@@ -34,6 +40,7 @@ describe('MarketDataGateway', () => {
 
     gateway = moduleRef.get(MarketDataGateway);
     tickers = moduleRef.get(TickersService);
+    auth = moduleRef.get(AuthService);
 
     roomEmit = jest.fn();
     server = { to: jest.fn().mockReturnValue({ emit: roomEmit }) };
@@ -124,5 +131,33 @@ describe('MarketDataGateway', () => {
     expect(() =>
       gateway.onUnsubscribe(client, { symbol: 'TSLA' }),
     ).not.toThrow();
+  });
+
+  describe('handshake', () => {
+    it('rejects a client that connects without a token', () => {
+      const client = clientStub('c1');
+
+      gateway.handleConnection(client);
+
+      expect(client.disconnect).toHaveBeenCalled();
+    });
+
+    it('rejets a client whose token does not verify', () => {
+      const client = clientStub('c1', 'not-a-jwt');
+
+      gateway.handleConnection(client);
+
+      expect(client.disconnect).toHaveBeenCalled();
+    });
+
+    it('lets a signed-in client stay connected', () => {
+      const seeded = USER_SEED[0];
+      const session = auth.signIn(seeded.username, seeded.password);
+      const client = clientStub('c1', session?.token);
+
+      gateway.handleConnection(client);
+
+      expect(client.disconnect).not.toHaveBeenCalled();
+    });
   });
 });
