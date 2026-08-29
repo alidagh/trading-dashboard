@@ -1,9 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import {
-  AuthUser,
-  LoginResponse
-} from '@trading-dashboard/contracts';
+import { AuthUser, LoginResponse } from '@trading-dashboard/contracts';
 import { USER_SEED } from './user-seed';
 
 type TokenClaims = {
@@ -15,7 +12,7 @@ type TokenClaims = {
 
 @Injectable()
 export class AuthService {
-  constructor(private readonly jwt: JwtService) { }
+  constructor(private readonly jwt: JwtService) {}
 
   signIn(username: string, password: string): LoginResponse | undefined {
     const found = USER_SEED.find(

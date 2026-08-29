@@ -1,11 +1,19 @@
-import { Controller, Get, NotFoundException, Param } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  NotFoundException,
+  Param,
+  UseGuards,
+} from '@nestjs/common';
 import type {
   TickerHistoryResponse,
   TickerListResponse,
 } from '@trading-dashboard/contracts';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { TickersService } from './tickers.service';
 
 @Controller('tickers')
+@UseGuards(JwtAuthGuard)
 export class TickersController {
   constructor(private readonly tickers: TickersService) {}
 
