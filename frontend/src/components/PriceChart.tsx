@@ -10,11 +10,13 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { HISTORY_INTERVALS, INTERVAL_MS } from '@trading-dashboard/contracts'
+import {
+  HISTORY_INTERVALS,
+  INTERVAL_MS,
+  PRICE_INTERVAL_MS,
+} from '@trading-dashboard/contracts'
 import type { HistoryInterval, PriceUpdate } from '@trading-dashboard/contracts'
 import { fetchHistory } from '../api/market'
-
-const MAX_POINTS = 180
 
 const UP = ['#35c46b', '#4fd1e0']
 const DOWN = ['#e5484d', '#f2a33c']
@@ -35,12 +37,19 @@ const clockTime = (timestamp: number) =>
     minute: '2-digit',
   })
 
-const calendarDate = (timestamp: number) =>
-  new Date(timestamp).toLocaleDateString([], { month: 'short', day: 'numeric' })
+const clockSeconds = (timestamp: number) =>
+  new Date(timestamp).toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  })
 
-
+// A minute of entries all fall in the same minute, so short windows need seconds.
 const labelFor = (interval: HistoryInterval) =>
-  INTERVAL_MS[interval] >= INTERVAL_MS['6h'] ? calendarDate : clockTime
+  INTERVAL_MS[interval] <= INTERVAL_MS['5m'] ? clockSeconds : clockTime
+
+const windowSize = (interval: HistoryInterval) =>
+  INTERVAL_MS[interval] / PRICE_INTERVAL_MS
 
 export function PriceChart({ symbol, tick }: Props) {
   const [series, setSeries] = useState<ChartPoint[]>([])
@@ -88,21 +97,12 @@ export function PriceChart({ symbol, tick }: Props) {
       return
     }
 
-    const bucket =
-      tick.timestamp - (tick.timestamp % INTERVAL_MS[interval])
-
-    setSeries((current) => {
-      const last = current.at(-1)
-
-      // Still inside the newest candle, so it moves rather than a new one appearing.
-      if (last?.timestamp === bucket) {
-        return [...current.slice(0, -1), { timestamp: bucket, price: tick.price }]
-      }
-
-      return [...current, { timestamp: bucket, price: tick.price }].slice(
-        -MAX_POINTS,
-      )
-    })
+    // The feed and the history are the same series, so a tick is just the next entry.
+    setSeries((current) =>
+      [...current, { timestamp: tick.timestamp, price: tick.price }].slice(
+        -windowSize(interval),
+      ),
+    )
   }, [tick, symbol, interval])
 
   if (!symbol) {
@@ -171,7 +171,7 @@ export function PriceChart({ symbol, tick }: Props) {
             fontSize={11}
           />
           <Tooltip
-            labelFormatter={(label) => labelFor(interval)(Number(label))}
+            labelFormatter={(label) => clockSeconds(Number(label))}
             formatter={(price) => [Number(price).toFixed(2), 'Price']}
             cursor={{ stroke: '#2a3446', strokeDasharray: '3 3' }}
             contentStyle={{

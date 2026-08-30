@@ -1,10 +1,17 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { HISTORY_INTERVALS, INTERVAL_MS } from '@trading-dashboard/contracts';
 import { CacheModule } from '@nestjs/cache-manager';
-import * as priceHistory from './price-history';
+import {
+  HISTORY_INTERVALS,
+  INTERVAL_MS,
+  PRICE_INTERVAL_MS,
+} from '@trading-dashboard/contracts';
+import { BUFFER_SIZE } from './price-history';
 import { TickersService } from './tickers.service';
 
 const CACHE_TTL_MS = 200;
+
+const waitPastTtl = () =>
+  new Promise((done) => setTimeout(done, CACHE_TTL_MS + 50));
 
 describe('TickersService', () => {
   let moduleRef: TestingModule;
@@ -44,172 +51,141 @@ describe('TickersService', () => {
   });
 
   describe('history', () => {
-    it('returns candles in chronological order', async () => {
-      for (const ticker of tickers.list()) {
-        const points = (await tickers.historyFor(ticker.symbol)) ?? [];
-        expect(points.length).toBeGreaterThan(1);
+    it('returns as many entries as the window holds', async () => {
+      for (const interval of HISTORY_INTERVALS) {
+        const points = (await tickers.historyFor('AAPL', interval)) ?? [];
 
-        const timestamps = points.map((candle) => candle.timestamp);
-        expect(timestamps).toEqual([...timestamps].sort((a, b) => a - b));
+        expect(points).toHaveLength(INTERVAL_MS[interval] / PRICE_INTERVAL_MS);
       }
     });
 
-    it('closes on the price the ticker list reports', async () => {
+    it('spaces every entry two seconds apart', async () => {
+      const points = (await tickers.historyFor('AAPL', '5m')) ?? [];
+      const gaps = points
+        .slice(1)
+        .map((point, i) => point.timestamp - points[i].timestamp);
+
+      expect(new Set(gaps)).toEqual(new Set([PRICE_INTERVAL_MS]));
+    });
+
+    it('keeps entries in order with no repeated timestamps', async () => {
+      const points = (await tickers.historyFor('AAPL', '30m')) ?? [];
+      const stamps = points.map((point) => point.timestamp);
+
+      expect(stamps).toEqual([...stamps].sort((a, b) => a - b));
+      expect(new Set(stamps).size).toBe(stamps.length);
+    });
+
+    it('ends on the price the ticker list reports', async () => {
       for (const ticker of tickers.list()) {
-        const points = (await tickers.historyFor(ticker.symbol)) ?? [];
+        const points = (await tickers.historyFor(ticker.symbol, '1m')) ?? [];
 
         expect(points.at(-1)?.close).toBe(ticker.lastPrice);
       }
     });
 
     it('brackets open and close with high and low', async () => {
-      const points = (await tickers.historyFor('BTC-USD')) ?? [];
+      const points = (await tickers.historyFor('BTC-USD', '1m')) ?? [];
 
-      for (const candle of points) {
-        expect(candle.high).toBeGreaterThanOrEqual(
-          Math.max(candle.open, candle.close),
+      for (const point of points) {
+        expect(point.high).toBeGreaterThanOrEqual(
+          Math.max(point.open, point.close),
         );
-        expect(candle.low).toBeLessThanOrEqual(
-          Math.min(candle.open, candle.close),
+        expect(point.low).toBeLessThanOrEqual(
+          Math.min(point.open, point.close),
         );
       }
     });
 
-    it('generates the same price on a frsh instance', async () => {
-      const restarted = await Test.createTestingModule({
-        imports: [CacheModule.register()],
-        providers: [TickersService],
-      }).compile();
-
-      const other = restarted.get(TickersService);
-      const first = await other.historyFor('AAPL');
-      const second = await tickers.historyFor('AAPL');
-
-      expect(first?.map((candle) => candle.close)).toEqual(
-        second?.map((candle) => candle.close),
-      );
-    });
-  });
-
-  describe('intervals', () => {
-    it('spaces candles by the interval it was asked for', async () => {
-      for (const interval of HISTORY_INTERVALS) {
-        const points = (await tickers.historyFor('AAPL', interval)) ?? [];
-        const gaps = points
-          .slice(1)
-          .map((candle, i) => candle.timestamp - points[i].timestamp);
-
-        expect(new Set(gaps)).toEqual(new Set([INTERVAL_MS[interval]]));
-      }
-    });
-
-    it('lands every candle on an interval boundary', async () => {
-      for (const interval of HISTORY_INTERVALS) {
-        const points = (await tickers.historyFor('AAPL', interval)) ?? [];
-
-        expect(
-          points.every(
-            (candle) => candle.timestamp % INTERVAL_MS[interval] === 0,
-          ),
-        ).toBe(true);
-      }
-    });
-
-    it('uses the current ticker price as the latest close', async () => {
-      const aapl = tickers.findBySymbol('AAPL');
-
-      for (const interval of HISTORY_INTERVALS) {
-        const points = (await tickers.historyFor('AAPL', interval)) ?? [];
-
-        expect(points.at(-1)?.close).toBe(aapl?.lastPrice);
-      }
-    });
-
-    it('draws a different series for each interval', async () => {
+    it('serves shorter windows out of the same series', async () => {
+      const hour = (await tickers.historyFor('AAPL', '1h')) ?? [];
       const minute = (await tickers.historyFor('AAPL', '1m')) ?? [];
-      const daily = (await tickers.historyFor('AAPL', '1d')) ?? [];
 
-      expect(daily.map((candle) => candle.close)).not.toEqual(
-        minute.map((candle) => candle.close),
-      );
-    });
-
-    it('generates a separate price path for each interval', async () => {
-      const steps = (points: { close: number }[]) =>
-        points
-          .slice(1)
-          .map((candle, i) => Math.sign(candle.close - points[i].close));
-
-      // BTC is priced high enough that rounding never flattens a move to zero.
-      const minute = (await tickers.historyFor('BTC-USD', '1m')) ?? [];
-      const daily = (await tickers.historyFor('BTC-USD', '1d')) ?? [];
-
-      expect(steps(daily)).not.toEqual(steps(minute));
+      expect(hour.slice(-minute.length)).toEqual(minute);
     });
 
     it('defaults to 1m when no interval is given', async () => {
       const fallback = (await tickers.historyFor('TSLA')) ?? [];
-      const explicit = (await tickers.historyFor('TSLA', '1m')) ?? [];
 
-      expect(fallback).toEqual(explicit);
+      expect(fallback).toHaveLength(30);
+    });
+  });
+
+  describe('rolling buffer', () => {
+    it('moves forward as prices arrive', async () => {
+      const before = (await tickers.historyFor('AAPL', '1m')) ?? [];
+
+      tickers.advanceAll();
+      await waitPastTtl();
+      const after = (await tickers.historyFor('AAPL', '1m')) ?? [];
+
+      expect(after).toHaveLength(before.length);
+      expect(after[0].timestamp).toBeGreaterThan(before[0].timestamp);
+      expect(after.at(-1)?.timestamp).toBe(
+        (before.at(-1)?.timestamp ?? 0) + PRICE_INTERVAL_MS,
+      );
+    });
+
+    it('never grows past an hour of entries', async () => {
+      for (let i = 0; i < 20; i++) {
+        tickers.advanceAll();
+      }
+      await waitPastTtl();
+
+      // The slice would hide a leak, so check what is actually being held.
+      const held = Reflect.get(tickers, 'history') as Map<string, unknown[]>;
+      expect(held.get('AAPL')).toHaveLength(BUFFER_SIZE);
+
+      const points = (await tickers.historyFor('AAPL', '1h')) ?? [];
+      expect(points).toHaveLength(BUFFER_SIZE);
+    });
+
+    it('keeps the newest entry in step with the live price', async () => {
+      tickers.advanceAll();
+      await waitPastTtl();
+
+      const aapl = tickers.findBySymbol('AAPL');
+      const points = (await tickers.historyFor('AAPL', '1m')) ?? [];
+
+      expect(points.at(-1)?.close).toBe(aapl?.lastPrice);
     });
   });
 
   describe('cache', () => {
-    it('builds a series once and serves the rest from the cache', async () => {
-      const build = jest.spyOn(priceHistory, 'buildHistory');
+    it('serves a repeat request without reslicing', async () => {
+      const first = await tickers.historyFor('AAPL', '1m');
+      const second = await tickers.historyFor('AAPL', '1m');
 
-      const first = await tickers.historyFor('AAPL');
-      const second = await tickers.historyFor('AAPL');
-      const third = await tickers.historyFor('aapl');
-
-      expect(build).toHaveBeenCalledTimes(1);
-      expect(second).toEqual(first);
-      expect(third).toEqual(first);
+      expect(second).toBe(first);
     });
 
-    it('keeps a separate entry per symbol', async () => {
-      const build = jest.spyOn(priceHistory, 'buildHistory');
+    it('holds the old window until the entry expires', async () => {
+      const before = (await tickers.historyFor('AAPL', '1m')) ?? [];
 
-      await tickers.historyFor('AAPL');
-      await tickers.historyFor('TSLA');
-      await tickers.historyFor('AAPL');
-      await tickers.historyFor('TSLA');
+      tickers.advanceAll();
+      const cached = (await tickers.historyFor('AAPL', '1m')) ?? [];
+      expect(cached.at(-1)?.timestamp).toBe(before.at(-1)?.timestamp);
 
-      expect(build).toHaveBeenCalledTimes(2);
+      await waitPastTtl();
+      const fresh = (await tickers.historyFor('AAPL', '1m')) ?? [];
+      expect(fresh.at(-1)?.timestamp).toBeGreaterThan(
+        before.at(-1)?.timestamp ?? 0,
+      );
     });
 
-    it('caches each interval separately', async () => {
-      const build = jest.spyOn(priceHistory, 'buildHistory');
+    it('keeps a separate entry per symbol and interval', async () => {
+      const aapl = await tickers.historyFor('AAPL', '1m');
+      const tsla = await tickers.historyFor('TSLA', '1m');
+      const longer = await tickers.historyFor('AAPL', '5m');
 
-      await tickers.historyFor('AAPL', '1m');
-      await tickers.historyFor('AAPL', '1h');
-      await tickers.historyFor('AAPL', '1m');
-      await tickers.historyFor('AAPL', '1h');
-
-      expect(build).toHaveBeenCalledTimes(2);
+      expect(tsla).not.toBe(aapl);
+      expect(longer).not.toBe(aapl);
+      expect(longer).toHaveLength(150);
     });
 
     it('never caches a symbol that is not seeded', async () => {
-      const build = jest.spyOn(priceHistory, 'buildHistory');
-
-      await tickers.historyFor('NOPE');
-      await tickers.historyFor('NOPE');
-
-      expect(build).not.toHaveBeenCalled();
-    });
-
-    it('rebuilds once the entry has expired', async () => {
-      const build = jest.spyOn(priceHistory, 'buildHistory');
-
-      await tickers.historyFor('MSFT');
-      await tickers.historyFor('MSFT');
-      expect(build).toHaveBeenCalledTimes(1);
-
-      await new Promise((done) => setTimeout(done, CACHE_TTL_MS + 50));
-      await tickers.historyFor('MSFT');
-
-      expect(build).toHaveBeenCalledTimes(2);
+      await expect(tickers.historyFor('NOPE', '1m')).resolves.toBeUndefined();
+      await expect(tickers.historyFor('NOPE', '1m')).resolves.toBeUndefined();
     });
   });
 });

@@ -4,17 +4,25 @@ import type { Cache } from 'cache-manager';
 import {
   HistoricalPricePoint,
   HistoryInterval,
+  INTERVAL_MS,
+  PRICE_INTERVAL_MS,
   PriceUpdate,
   Ticker,
 } from '@trading-dashboard/contracts';
 import seedrandom from 'seedrandom';
-import { buildHistory, nextPrice } from './price-history';
+import {
+  BUFFER_SIZE,
+  nextPrice,
+  pricePoint,
+  seedHistory,
+} from './price-history';
 import { TICKER_SEED } from './ticker-seed';
 
 @Injectable()
 export class TickersService {
   private readonly tickers = TICKER_SEED;
   private readonly walks = new Map<string, seedrandom.PRNG>();
+  private readonly history = new Map<string, HistoricalPricePoint[]>();
 
   constructor(@Inject(CACHE_MANAGER) private readonly cache: Cache) {}
 
@@ -43,11 +51,34 @@ export class TickersService {
   advanceAll(): PriceUpdate[] {
     const now = Date.now();
 
-    return this.tickers.map((ticker) => ({
-      symbol: ticker.symbol,
-      price: this.advance(ticker.symbol) ?? ticker.lastPrice,
-      timestamp: now,
-    }));
+    return this.tickers.map((ticker) => {
+      const open = ticker.lastPrice;
+      const price = this.advance(ticker.symbol) ?? open;
+
+      // Seeded up to the previous slot so this push becomes the newest entry.
+      const buffer = this.bufferFor(ticker.symbol, now - PRICE_INTERVAL_MS);
+      const previous = buffer.at(-1);
+      const at = previous ? previous.timestamp + PRICE_INTERVAL_MS : now;
+
+      buffer.push(pricePoint(ticker, open, price, at));
+      if (buffer.length > BUFFER_SIZE) {
+        buffer.shift();
+      }
+
+      return { symbol: ticker.symbol, price, timestamp: at };
+    });
+  }
+
+  private bufferFor(symbol: string, endsAt: number): HistoricalPricePoint[] {
+    let buffer = this.history.get(symbol);
+
+    if (!buffer) {
+      const ticker = this.findBySymbol(symbol);
+      buffer = ticker ? seedHistory(ticker, endsAt) : [];
+      this.history.set(symbol, buffer);
+    }
+
+    return buffer;
   }
 
   findBySymbol(symbol: string): Ticker | undefined {
@@ -72,8 +103,9 @@ export class TickersService {
       return cached;
     }
 
-    console.log(`[cache] miss ${key}, building series`);
-    const points = buildHistory(ticker, Date.now(), interval);
+    console.log(`[cache] miss ${key}, slicing buffer`);
+    const wanted = INTERVAL_MS[interval] / PRICE_INTERVAL_MS;
+    const points = this.bufferFor(ticker.symbol, Date.now()).slice(-wanted);
     await this.cache.set(key, points);
 
     return points;

@@ -1,13 +1,11 @@
 import seedrandom from 'seedrandom';
 import {
   HistoricalPricePoint,
-  HistoryInterval,
-  INTERVAL_MS,
+  PRICE_INTERVAL_MS,
   Ticker,
 } from '@trading-dashboard/contracts';
 
-const CANDLES = 120;
-const ONE_MINUTE = 60 * 1000;
+export const BUFFER_SIZE = 1800;
 
 function roundPrice(value: number): number {
   return Math.round(value * 100) / 100;
@@ -21,38 +19,45 @@ export function nextPrice(ticker: Ticker, rng: seedrandom.PRNG): number {
   return roundPrice(ticker.lastPrice * (1 + (rng() - 0.5) * stepFor(ticker)));
 }
 
-export function buildHistory(
+export function pricePoint(
+  ticker: Ticker,
+  open: number,
+  close: number,
+  at: number,
+): HistoricalPricePoint {
+  const wick = close * stepFor(ticker) * 0.3;
+
+  return {
+    timestamp: at,
+    open: roundPrice(open),
+    high: roundPrice(Math.max(open, close) + wick),
+    low: roundPrice(Math.min(open, close) - wick),
+    close: roundPrice(close),
+    volume: Math.round(500 + Math.abs(close - open) * 2000),
+  };
+}
+
+// This is back dated so a chart has a full hour behind it the moment the service starts.
+export function seedHistory(
   ticker: Ticker,
   endsAt: number,
-  interval: HistoryInterval = '1m',
 ): HistoricalPricePoint[] {
-  const spacing = INTERVAL_MS[interval];
-  const rng = seedrandom(`${ticker.symbol}:${interval}`);
+  const rng = seedrandom(ticker.symbol);
+  const closes = [ticker.lastPrice];
 
-  // A longer candle covers more time, so it drifts further.
-  const step = stepFor(ticker) * Math.sqrt(spacing / ONE_MINUTE);
-  const latest = Math.floor(endsAt / spacing) * spacing;
-
-  const candles: HistoricalPricePoint[] = [];
-
-  // Built backwards from lastPrice so the newst candle matches the ticker list.
-  let close = ticker.lastPrice;
-
-  for (let i = 0; i < CANDLES; i++) {
-    const open = close * (1 + (rng() - 0.5) * step);
-    const wick = close * step * rng();
-
-    candles.unshift({
-      timestamp: latest - i * spacing,
-      open: roundPrice(open),
-      high: roundPrice(Math.max(open, close) + wick),
-      low: roundPrice(Math.min(open, close) - wick),
-      close: roundPrice(close),
-      volume: Math.round(1000 + rng() * 1500),
-    });
-
-    close = open;
+  for (let i = 1; i < BUFFER_SIZE; i++) {
+    const previous = closes[0];
+    closes.unshift(
+      roundPrice(previous * (1 + (rng() - 0.5) * stepFor(ticker))),
+    );
   }
 
-  return candles;
+  return closes.map((close, i) =>
+    pricePoint(
+      ticker,
+      i === 0 ? close : closes[i - 1],
+      close,
+      endsAt - (BUFFER_SIZE - 1 - i) * PRICE_INTERVAL_MS,
+    ),
+  );
 }
