@@ -22,7 +22,7 @@ function moveSinceOpen(live: number, open: number) {
 
   return {
     direction,
-    label: `${percent >= 0 ? '+' : '-'}${percent.toFixed(2)}%`,
+    label: `${percent >= 0 ? '+' : ''}${percent.toFixed(2)}%`,
   }
 }
 
