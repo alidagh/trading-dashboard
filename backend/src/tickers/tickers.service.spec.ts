@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { HISTORY_INTERVALS, INTERVAL_MS } from '@trading-dashboard/contracts';
 import { CacheModule } from '@nestjs/cache-manager';
 import * as priceHistory from './price-history';
 import { TickersService } from './tickers.service';
@@ -90,6 +91,70 @@ describe('TickersService', () => {
     });
   });
 
+  describe('intervals', () => {
+    it('spaces candles by the interval it was asked for', async () => {
+      for (const interval of HISTORY_INTERVALS) {
+        const points = (await tickers.historyFor('AAPL', interval)) ?? [];
+        const gaps = points
+          .slice(1)
+          .map((candle, i) => candle.timestamp - points[i].timestamp);
+
+        expect(new Set(gaps)).toEqual(new Set([INTERVAL_MS[interval]]));
+      }
+    });
+
+    it('lands every candle on an interval boundary', async () => {
+      for (const interval of HISTORY_INTERVALS) {
+        const points = (await tickers.historyFor('AAPL', interval)) ?? [];
+
+        expect(
+          points.every(
+            (candle) => candle.timestamp % INTERVAL_MS[interval] === 0,
+          ),
+        ).toBe(true);
+      }
+    });
+
+    it('uses the current ticker price as the latest close', async () => {
+      const aapl = tickers.findBySymbol('AAPL');
+
+      for (const interval of HISTORY_INTERVALS) {
+        const points = (await tickers.historyFor('AAPL', interval)) ?? [];
+
+        expect(points.at(-1)?.close).toBe(aapl?.lastPrice);
+      }
+    });
+
+    it('draws a different series for each interval', async () => {
+      const minute = (await tickers.historyFor('AAPL', '1m')) ?? [];
+      const daily = (await tickers.historyFor('AAPL', '1d')) ?? [];
+
+      expect(daily.map((candle) => candle.close)).not.toEqual(
+        minute.map((candle) => candle.close),
+      );
+    });
+
+    it('generates a separate price path for each interval', async () => {
+      const steps = (points: { close: number }[]) =>
+        points
+          .slice(1)
+          .map((candle, i) => Math.sign(candle.close - points[i].close));
+
+      // BTC is priced high enough that rounding never flattens a move to zero.
+      const minute = (await tickers.historyFor('BTC-USD', '1m')) ?? [];
+      const daily = (await tickers.historyFor('BTC-USD', '1d')) ?? [];
+
+      expect(steps(daily)).not.toEqual(steps(minute));
+    });
+
+    it('defaults to 1m when no interval is given', async () => {
+      const fallback = (await tickers.historyFor('TSLA')) ?? [];
+      const explicit = (await tickers.historyFor('TSLA', '1m')) ?? [];
+
+      expect(fallback).toEqual(explicit);
+    });
+  });
+
   describe('cache', () => {
     it('builds a series once and serves the rest from the cache', async () => {
       const build = jest.spyOn(priceHistory, 'buildHistory');
@@ -110,6 +175,17 @@ describe('TickersService', () => {
       await tickers.historyFor('TSLA');
       await tickers.historyFor('AAPL');
       await tickers.historyFor('TSLA');
+
+      expect(build).toHaveBeenCalledTimes(2);
+    });
+
+    it('caches each interval separately', async () => {
+      const build = jest.spyOn(priceHistory, 'buildHistory');
+
+      await tickers.historyFor('AAPL', '1m');
+      await tickers.historyFor('AAPL', '1h');
+      await tickers.historyFor('AAPL', '1m');
+      await tickers.historyFor('AAPL', '1h');
 
       expect(build).toHaveBeenCalledTimes(2);
     });
