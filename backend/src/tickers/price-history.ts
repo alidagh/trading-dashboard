@@ -1,55 +1,49 @@
+import seedrandom from 'seedrandom';
 import { HistoricalPricePoint, Ticker } from '@trading-dashboard/contracts';
 
-const HISTORY_LENGTH = 120;
+const CANDLES = 120;
 const ONE_MINUTE = 60 * 1000;
 
 function roundPrice(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
+function stepFor(ticker: Ticker): number {
+  return ticker.assetClass === 'crypto' ? 0.004 : 0.0012;
+}
+
+export function nextPrice(ticker: Ticker, rng: seedrandom.PRNG): number {
+  return roundPrice(ticker.lastPrice * (1 + (rng() - 0.5) * stepFor(ticker)));
+}
+
 export function buildHistory(
   ticker: Ticker,
   endsAt: number,
 ): HistoricalPricePoint[] {
-  const history: HistoricalPricePoint[] = [];
+  const rng = seedrandom(ticker.symbol);
+  const step = stepFor(ticker);
+  const latest = Math.floor(endsAt / ONE_MINUTE) * ONE_MINUTE;
 
-  const volatility =
-    ticker.assetClass === 'crypto'
-      ? ticker.lastPrice * 0.01
-      : ticker.lastPrice * 0.003;
+  const candles: HistoricalPricePoint[] = [];
 
-  let previousClose =
-    ticker.lastPrice - Math.sin(HISTORY_LENGTH / 8) * volatility;
+  // Built backwards from lastPrice so the newst candle matches the ticker list.
+  let close = ticker.lastPrice;
 
-  for (let i = 0; i < HISTORY_LENGTH; i++) {
-    const remaining = HISTORY_LENGTH - 1 - i;
+  for (let i = 0; i < CANDLES; i++) {
+    const open = close * (1 + (rng() - 0.5) * step);
+    const wick = close * step * rng();
 
-    let close =
-      ticker.lastPrice + Math.sin((i + ticker.symbol.length) / 8) * volatility;
-
-    // Keep the final point in sync with the current ticker price
-    if (i === HISTORY_LENGTH - 1) {
-      close = ticker.lastPrice;
-    }
-
-    const open = previousClose;
-
-    const candleRange = volatility * 0.15;
-
-    const high = Math.max(open, close) + candleRange;
-    const low = Math.min(open, close) - candleRange;
-
-    history.push({
-      timestamp: endsAt - remaining * ONE_MINUTE,
+    candles.unshift({
+      timestamp: latest - i * ONE_MINUTE,
       open: roundPrice(open),
-      high: roundPrice(high),
-      low: roundPrice(low),
+      high: roundPrice(Math.max(open, close) + wick),
+      low: roundPrice(Math.min(open, close) - wick),
       close: roundPrice(close),
-      volume: Math.round(1000 + Math.abs(Math.sin(i / 4)) * 500),
+      volume: Math.round(1000 + rng() * 1500),
     });
 
-    previousClose = close;
+    close = open;
   }
 
-  return history;
+  return candles;
 }
