@@ -23,8 +23,10 @@ export class TickersController {
   }
 
   @Get(':symbol/history')
-  history(@Param('symbol') symbol: string): TickerHistoryResponse {
-    const points = this.tickers.historyFor(symbol);
+  async history(
+    @Param('symbol') symbol: string,
+  ): Promise<TickerHistoryResponse> {
+    const points = await this.tickers.historyFor(symbol);
     if (!points) {
       throw new NotFoundException(`No ticker for symbol ${symbol}`);
     }
