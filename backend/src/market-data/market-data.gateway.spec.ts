@@ -1,4 +1,5 @@
 import { Test } from '@nestjs/testing';
+import { CacheModule } from '@nestjs/cache-manager';
 import { MARKET_EVENTS } from '@trading-dashboard/contracts';
 import { Socket } from 'socket.io';
 import { AuthModule } from '../auth/auth.module';
@@ -34,7 +35,7 @@ describe('MarketDataGateway', () => {
 
   beforeEach(async () => {
     const moduleRef = await Test.createTestingModule({
-      imports: [AuthModule],
+      imports: [AuthModule, CacheModule.register()],
       providers: [MarketDataGateway, TickersService],
     }).compile();
 
