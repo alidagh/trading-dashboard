@@ -1,11 +1,15 @@
 import {
+  BadRequestException,
   Controller,
   Get,
   NotFoundException,
   Param,
+  Query,
   UseGuards,
 } from '@nestjs/common';
+import { HISTORY_INTERVALS } from '@trading-dashboard/contracts';
 import type {
+  HistoryInterval,
   TickerHistoryResponse,
   TickerListResponse,
 } from '@trading-dashboard/contracts';
@@ -25,12 +29,20 @@ export class TickersController {
   @Get(':symbol/history')
   async history(
     @Param('symbol') symbol: string,
+    @Query('interval') requested?: string,
   ): Promise<TickerHistoryResponse> {
-    const points = await this.tickers.historyFor(symbol);
+    const interval = (requested ?? '1m') as HistoryInterval;
+    if (!HISTORY_INTERVALS.includes(interval)) {
+      throw new BadRequestException(
+        `interval must be one of ${HISTORY_INTERVALS.join(', ')}`,
+      );
+    }
+
+    const points = await this.tickers.historyFor(symbol, interval);
     if (!points) {
       throw new NotFoundException(`No ticker for symbol ${symbol}`);
     }
 
-    return { symbol: symbol.toUpperCase(), points };
+    return { symbol: symbol.toUpperCase(), interval, points };
   }
 }

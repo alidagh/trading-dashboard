@@ -1,5 +1,10 @@
 import seedrandom from 'seedrandom';
-import { HistoricalPricePoint, Ticker } from '@trading-dashboard/contracts';
+import {
+  HistoricalPricePoint,
+  HistoryInterval,
+  INTERVAL_MS,
+  Ticker,
+} from '@trading-dashboard/contracts';
 
 const CANDLES = 120;
 const ONE_MINUTE = 60 * 1000;
@@ -19,10 +24,14 @@ export function nextPrice(ticker: Ticker, rng: seedrandom.PRNG): number {
 export function buildHistory(
   ticker: Ticker,
   endsAt: number,
+  interval: HistoryInterval = '1m',
 ): HistoricalPricePoint[] {
-  const rng = seedrandom(ticker.symbol);
-  const step = stepFor(ticker);
-  const latest = Math.floor(endsAt / ONE_MINUTE) * ONE_MINUTE;
+  const spacing = INTERVAL_MS[interval];
+  const rng = seedrandom(`${ticker.symbol}:${interval}`);
+
+  // A longer candle covers more time, so it drifts further.
+  const step = stepFor(ticker) * Math.sqrt(spacing / ONE_MINUTE);
+  const latest = Math.floor(endsAt / spacing) * spacing;
 
   const candles: HistoricalPricePoint[] = [];
 
@@ -34,7 +43,7 @@ export function buildHistory(
     const wick = close * step * rng();
 
     candles.unshift({
-      timestamp: latest - i * ONE_MINUTE,
+      timestamp: latest - i * spacing,
       open: roundPrice(open),
       high: roundPrice(Math.max(open, close) + wick),
       low: roundPrice(Math.min(open, close) - wick),
