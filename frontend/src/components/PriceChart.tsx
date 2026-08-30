@@ -10,7 +10,8 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import type { PriceUpdate } from '@trading-dashboard/contracts'
+import { HISTORY_INTERVALS, INTERVAL_MS } from '@trading-dashboard/contracts'
+import type { HistoryInterval, PriceUpdate } from '@trading-dashboard/contracts'
 import { fetchHistory } from '../api/market'
 
 const MAX_POINTS = 180
@@ -34,8 +35,16 @@ const clockTime = (timestamp: number) =>
     minute: '2-digit',
   })
 
+const calendarDate = (timestamp: number) =>
+  new Date(timestamp).toLocaleDateString([], { month: 'short', day: 'numeric' })
+
+
+const labelFor = (interval: HistoryInterval) =>
+  INTERVAL_MS[interval] >= INTERVAL_MS['6h'] ? calendarDate : clockTime
+
 export function PriceChart({ symbol, tick }: Props) {
   const [series, setSeries] = useState<ChartPoint[]>([])
+  const [interval, setInterval] = useState<HistoryInterval>('1m')
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
@@ -46,7 +55,7 @@ export function PriceChart({ symbol, tick }: Props) {
     let cancelled = false
     setLoading(true)
 
-    fetchHistory(symbol)
+    fetchHistory(symbol, interval)
       .then((history) => {
         if (cancelled) {
           return
@@ -72,22 +81,29 @@ export function PriceChart({ symbol, tick }: Props) {
     return () => {
       cancelled = true
     }
-  }, [symbol])
+  }, [symbol, interval])
 
   useEffect(() => {
     if (!tick || tick.symbol !== symbol) {
       return
     }
 
+    const bucket =
+      tick.timestamp - (tick.timestamp % INTERVAL_MS[interval])
+
     setSeries((current) => {
-      if (current.at(-1)?.timestamp === tick.timestamp) {
-        return current
+      const last = current.at(-1)
+
+      // Still inside the newest candle, so it moves rather than a new one appearing.
+      if (last?.timestamp === bucket) {
+        return [...current.slice(0, -1), { timestamp: bucket, price: tick.price }]
       }
 
-      const next = [...current, { timestamp: tick.timestamp, price: tick.price }]
-      return next.slice(-MAX_POINTS)
+      return [...current, { timestamp: bucket, price: tick.price }].slice(
+        -MAX_POINTS,
+      )
     })
-  }, [tick, symbol])
+  }, [tick, symbol, interval])
 
   if (!symbol) {
     return <p className="panel-note">Pick a ticker to see its chart</p>
@@ -102,7 +118,21 @@ export function PriceChart({ symbol, tick }: Props) {
 
   return (
     <div className="chart">
-      <h2>{symbol}</h2>
+      <div className="chart-head">
+        <h2>{symbol}</h2>
+        <div className="intervals">
+          {HISTORY_INTERVALS.map((option) => (
+            <button
+              key={option}
+              type="button"
+              className={option === interval ? 'selected' : undefined}
+              onClick={() => setInterval(option)}
+            >
+              {option}
+            </button>
+          ))}
+        </div>
+      </div>
       <ResponsiveContainer width="100%" height={320}>
         <AreaChart data={series} margin={{ top: 12, right: 8, bottom: 0, left: 8 }}>
           <defs>
@@ -121,7 +151,7 @@ export function PriceChart({ symbol, tick }: Props) {
             type="number"
             scale="time"
             domain={['dataMin', 'dataMax']}
-            tickFormatter={clockTime}
+            tickFormatter={labelFor(interval)}
             minTickGap={28}
             axisLine={false}
             tickLine={false}
@@ -139,7 +169,7 @@ export function PriceChart({ symbol, tick }: Props) {
             fontSize={11}
           />
           <Tooltip
-            labelFormatter={(label) => clockTime(Number(label))}
+            labelFormatter={(label) => labelFor(interval)(Number(label))}
             formatter={(price) => [Number(price).toFixed(2), 'Price']}
             cursor={{ stroke: '#2a3446', strokeDasharray: '3 3' }}
             contentStyle={{

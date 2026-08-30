@@ -1,4 +1,5 @@
 import type {
+  HistoryInterval,
   TickerHistoryResponse,
   TickerListResponse,
 } from '@trading-dashboard/contracts'
@@ -9,9 +10,10 @@ export async function fetchTickers() {
   return tickers
 }
 
-export async function fetchHistory(symbol: string) {
+export async function fetchHistory(symbol: string, interval: HistoryInterval) {
   const { data: history } = await api.get<TickerHistoryResponse>(
     `/tickers/${symbol}/history`,
+    { params: { interval } },
   )
   return history
 }

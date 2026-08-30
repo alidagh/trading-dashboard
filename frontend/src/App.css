@@ -156,7 +156,7 @@
 }
 
 .chart h2 {
-  margin: 0 0 0.6rem 0.3rem;
+  margin: 0 0 0 0.3rem;
   font-size: 0.95rem;
   font-weight: 600;
   letter-spacing: 0.02em;
@@ -286,4 +286,38 @@
   margin: 0 0 0.6rem;
   color: var(--down);
   font-size: 0.78rem;
+}
+
+.chart-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.6rem;
+}
+
+.intervals {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.intervals button {
+  padding: 0.2rem 0.5rem;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.intervals button:hover {
+  color: var(--text);
+}
+
+.intervals button.selected {
+  border-color: var(--border);
+  background: #172130;
+  color: var(--text);
 }
