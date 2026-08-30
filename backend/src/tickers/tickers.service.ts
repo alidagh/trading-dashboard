@@ -4,6 +4,7 @@ import type { Cache } from 'cache-manager';
 import {
   HistoricalPricePoint,
   HistoryInterval,
+  PriceUpdate,
   Ticker,
 } from '@trading-dashboard/contracts';
 import seedrandom from 'seedrandom';
@@ -37,6 +38,16 @@ export class TickersService {
     ticker.lastPrice = nextPrice(ticker, walk);
 
     return ticker.lastPrice;
+  }
+
+  advanceAll(): PriceUpdate[] {
+    const now = Date.now();
+
+    return this.tickers.map((ticker) => ({
+      symbol: ticker.symbol,
+      price: this.advance(ticker.symbol) ?? ticker.lastPrice,
+      timestamp: now,
+    }));
   }
 
   findBySymbol(symbol: string): Ticker | undefined {

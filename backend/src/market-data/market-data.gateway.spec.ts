@@ -2,6 +2,7 @@ import { Test } from '@nestjs/testing';
 import { CacheModule } from '@nestjs/cache-manager';
 import { MARKET_EVENTS } from '@trading-dashboard/contracts';
 import { Socket } from 'socket.io';
+import { AlertsModule } from '../alerts/alerts.module';
 import { AuthModule } from '../auth/auth.module';
 import { AuthService } from '../auth/auth.service';
 import { USER_SEED } from '../auth/user-seed';
@@ -35,7 +36,7 @@ describe('MarketDataGateway', () => {
 
   beforeEach(async () => {
     const moduleRef = await Test.createTestingModule({
-      imports: [AuthModule, CacheModule.register()],
+      imports: [AuthModule, CacheModule.register(), AlertsModule],
       providers: [MarketDataGateway, TickersService],
     }).compile();
 
@@ -50,9 +51,20 @@ describe('MarketDataGateway', () => {
     // ignore console.log during tests for now.
     jest.spyOn(console, 'log').mockImplementation(() => undefined);
     jest.useFakeTimers();
+    gateway.onModuleInit();
   });
 
+  const roomsOf = () =>
+    Reflect.get(gateway, 'rooms') as Map<string, Set<string>>;
+
+  // Which symbols the shared clock actually pushed a price for.
+  const tickedSymbols = () =>
+    roomEmit.mock.calls
+      .map(([, tick]) => (tick as { symbol: string }).symbol)
+      .filter((symbol) => symbol === 'AAPL');
+
   afterEach(() => {
+    gateway.onModuleDestroy();
     jest.useRealTimers();
     jest.restoreAllMocks();
   });
@@ -78,7 +90,18 @@ describe('MarketDataGateway', () => {
     jest.advanceTimersByTime(4000);
 
     expect(server.to).toHaveBeenCalledWith('AAPL');
-    expect(roomEmit).toHaveBeenCalledTimes(2);
+    expect(tickedSymbols()).toEqual(['AAPL', 'AAPL']);
+  });
+
+  it('moves every ticker, not only the watched one', () => {
+    gateway.onSubscribe(clientStub('c1'), { symbol: 'AAPL' });
+
+    jest.advanceTimersByTime(2000);
+
+    const rooms = server.to.mock.calls.map(([room]) => room as string);
+    expect(new Set(rooms)).toEqual(
+      new Set(tickers.list().map((ticker) => ticker.symbol)),
+    );
   });
 
   it('ignores a symbol that is not in the seed', () => {
@@ -89,18 +112,19 @@ describe('MarketDataGateway', () => {
 
     expect(client.join).not.toHaveBeenCalled();
     expect(client.emit).not.toHaveBeenCalled();
-    expect(roomEmit).not.toHaveBeenCalled();
+    expect(roomsOf().has('NOPE')).toBe(false);
   });
 
-  it('stops the stream once the last subscriber leaves', () => {
+  it('drops the room once the last subscriber leaves', () => {
     const client = clientStub('c1');
 
     gateway.onSubscribe(client, { symbol: 'AAPL' });
+    expect(roomsOf().get('AAPL')?.size).toBe(1);
+
     gateway.onUnsubscribe(client, { symbol: 'aapl' });
-    jest.advanceTimersByTime(6000);
 
     expect(client.leave).toHaveBeenCalledWith('AAPL');
-    expect(roomEmit).not.toHaveBeenCalled();
+    expect(roomsOf().has('AAPL')).toBe(false);
   });
 
   it('keeps streaming if at least someon else is still watching', () => {
@@ -112,7 +136,7 @@ describe('MarketDataGateway', () => {
     gateway.onUnsubscribe(first, { symbol: 'AAPL' });
     jest.advanceTimersByTime(2000);
 
-    expect(roomEmit).toHaveBeenCalledTimes(1);
+    expect(tickedSymbols()).toEqual(['AAPL']);
   });
 
   it('clears every subscription a client held when it disconnects', () => {
@@ -120,10 +144,11 @@ describe('MarketDataGateway', () => {
 
     gateway.onSubscribe(client, { symbol: 'AAPL' });
     gateway.onSubscribe(client, { symbol: 'BTC-USD' });
-    gateway.handleDisconnect(client);
-    jest.advanceTimersByTime(6000);
+    expect(roomsOf().size).toBe(2);
 
-    expect(roomEmit).not.toHaveBeenCalled();
+    gateway.handleDisconnect(client);
+
+    expect(roomsOf().size).toBe(0);
   });
 
   it('Does nothing when client unsubscribes for something never subscribed to', () => {

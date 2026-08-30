@@ -1,3 +1,4 @@
+import { OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import {
   ConnectedSocket,
   MessageBody,
@@ -10,10 +11,10 @@ import {
 import { Server, Socket } from 'socket.io';
 import { MARKET_EVENTS } from '@trading-dashboard/contracts';
 import type {
-  PriceUpdate,
   SubscribePayload,
   UnsubscribePayload,
 } from '@trading-dashboard/contracts';
+import { AlertsService } from '../alerts/alerts.service';
 import { AuthService } from '../auth/auth.service';
 import { TickersService } from '../tickers/tickers.service';
 
@@ -21,7 +22,11 @@ const TICK_INTERVAL_MS = 2000;
 
 @WebSocketGateway({ cors: { origin: '*' } })
 export class MarketDataGateway
-  implements OnGatewayConnection, OnGatewayDisconnect
+  implements
+    OnGatewayConnection,
+    OnGatewayDisconnect,
+    OnModuleInit,
+    OnModuleDestroy
 {
   @WebSocketServer()
   private readonly server!: Server;
@@ -29,13 +34,39 @@ export class MarketDataGateway
   // maintain the members state by mapping symbol to uniqe clients.
   private readonly rooms = new Map<string, Set<string>>();
 
-  // streams is a map between symbol to setInterval which emit events
-  private readonly streams = new Map<string, NodeJS.Timeout>();
+  private clock?: NodeJS.Timeout;
 
   constructor(
     private readonly tickers: TickersService,
     private readonly auth: AuthService,
+    private readonly alerts: AlertsService,
   ) {}
+
+  onModuleInit(): void {
+    this.clock = setInterval(() => this.tick(), TICK_INTERVAL_MS);
+  }
+
+  onModuleDestroy(): void {
+    clearInterval(this.clock);
+  }
+
+  // Keep all tickers moving so alerts can trigger even when a symbol isn't being watched.
+  private tick(): void {
+    const updates = this.tickers.advanceAll();
+
+    for (const update of updates) {
+      this.server.to(update.symbol).emit(MARKET_EVENTS.priceUpdate, update);
+    }
+
+    for (const fired of this.alerts.check(updates)) {
+      console.log(
+        `[ws] alert fired for ${fired.userId}: ${fired.alert.symbol} ${fired.alert.direction} ${fired.alert.threshold}`,
+      );
+      this.server
+        .to(`user:${fired.userId}`)
+        .emit(MARKET_EVENTS.alertTriggered, fired.alert);
+    }
+  }
 
   handleConnection(client: Socket): void {
     const token = client.handshake.auth?.token as string | undefined;
@@ -47,6 +78,7 @@ export class MarketDataGateway
       return;
     }
 
+    void client.join(`user:${user.id}`);
     console.log(`[ws] connected ${client.id} as ${user.username}`);
   }
 
@@ -76,8 +108,6 @@ export class MarketDataGateway
       price: ticker.lastPrice,
       timestamp: Date.now(),
     });
-
-    this.openStram(ticker.symbol);
   }
 
   @SubscribeMessage(MARKET_EVENTS.unsubscribe)
@@ -107,35 +137,6 @@ export class MarketDataGateway
     }
 
     this.rooms.delete(symbol);
-
-    const stream = this.streams.get(symbol);
-    if (stream) {
-      clearInterval(stream);
-      this.streams.delete(symbol);
-      console.log(`[ws] stopped streaming ${symbol}, no subscribers left`);
-    }
-  }
-
-  private openStram(symbol: string): void {
-    if (this.streams.has(symbol)) {
-      return;
-    }
-
-    const stream = setInterval(() => {
-      const tick = this.priceTick(symbol);
-      console.log('[ws] tick', tick.symbol, tick.price);
-      this.server.to(symbol).emit(MARKET_EVENTS.priceUpdate, tick);
-    }, TICK_INTERVAL_MS);
-
-    console.log(`[ws] streaming ${symbol} every ${TICK_INTERVAL_MS}ms`);
-    this.streams.set(symbol, stream);
-  }
-
-  private priceTick(symbol: string): PriceUpdate {
-    return {
-      symbol,
-      price: this.tickers.advance(symbol) ?? 0,
-      timestamp: Date.now(),
-    };
+    console.log(`[ws] no subscribers left on ${symbol}`);
   }
 }
