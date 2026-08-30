@@ -16,8 +16,8 @@ import { fetchHistory } from '../api/market'
 
 const MAX_POINTS = 180
 
-const LINE_START = '#35c46b'
-const LINE_END = '#4fd1e0'
+const UP = ['#35c46b', '#4fd1e0']
+const DOWN = ['#e5484d', '#f2a33c']
 
 type ChartPoint = {
   timestamp: number
@@ -115,6 +115,8 @@ export function PriceChart({ symbol, tick }: Props) {
 
   const openPrice = series[0]?.price
   const latest = series.at(-1)
+  const [lineStart, lineEnd] =
+    latest && openPrice !== undefined && latest.price < openPrice ? DOWN : UP
 
   return (
     <div className="chart">
@@ -137,12 +139,12 @@ export function PriceChart({ symbol, tick }: Props) {
         <AreaChart data={series} margin={{ top: 12, right: 8, bottom: 0, left: 8 }}>
           <defs>
             <linearGradient id="priceLine" x1="0" y1="0" x2="1" y2="0">
-              <stop offset="0%" stopColor={LINE_START} />
-              <stop offset="100%" stopColor={LINE_END} />
+              <stop offset="0%" stopColor={lineStart} />
+              <stop offset="100%" stopColor={lineEnd} />
             </linearGradient>
             <linearGradient id="priceFill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={LINE_START} stopOpacity={0.28} />
-              <stop offset="100%" stopColor={LINE_START} stopOpacity={0} />
+              <stop offset="0%" stopColor={lineStart} stopOpacity={0.28} />
+              <stop offset="100%" stopColor={lineStart} stopOpacity={0} />
             </linearGradient>
           </defs>
           <CartesianGrid stroke="#1b2230" strokeDasharray="2 4" vertical={false} />
@@ -192,13 +194,13 @@ export function PriceChart({ symbol, tick }: Props) {
             />
           )}
           <Area
-            type="linear"
+            type="monotone"
             dataKey="price"
             stroke="url(#priceLine)"
             strokeWidth={1.6}
             fill="url(#priceFill)"
             dot={false}
-            activeDot={{ r: 4, fill: LINE_START, stroke: '#10141c', strokeWidth: 2 }}
+            activeDot={{ r: 4, fill: lineStart, stroke: '#10141c', strokeWidth: 2 }}
             isAnimationActive={false}
           />
           {latest && (
@@ -206,7 +208,7 @@ export function PriceChart({ symbol, tick }: Props) {
               x={latest.timestamp}
               y={latest.price}
               r={3.5}
-              fill={LINE_START}
+              fill={lineStart}
               stroke="#10141c"
               strokeWidth={2}
             />
