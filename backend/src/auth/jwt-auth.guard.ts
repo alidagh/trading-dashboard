@@ -8,7 +8,8 @@ import type { Request } from 'express';
 import type { AuthUser } from '@trading-dashboard/contracts';
 import { AuthService } from './auth.service';
 
-export type AuthenticatedRequest = Request & { user?: AuthUser };
+// Only ever handed to a route behind this guard, so the user is already resolved.
+export type AuthenticatedRequest = Request & { user: AuthUser };
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
