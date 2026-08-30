@@ -24,3 +24,15 @@ export interface HistoricalPricePoint {
   close: number;
   volume: number;
 }
+
+export const HISTORY_INTERVALS = ['1m', '30m', '1h', '6h', '1d'] as const;
+
+export type HistoryInterval = (typeof HISTORY_INTERVALS)[number];
+
+export const INTERVAL_MS: Record<HistoryInterval, number> = {
+  '1m': 60_000,
+  '30m': 30 * 60_000,
+  '1h': 60 * 60_000,
+  '6h': 6 * 60 * 60_000,
+  '1d': 24 * 60 * 60_000,
+};
