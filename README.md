@@ -52,7 +52,7 @@ POST /auth/login
 GET  /health 
 
 GET  /tickers
-GET  /tickers/:sympol/history?interval=1m|5m|30m|1h
+GET  /tickers/:symbol/history?interval=1m|5m|30m|1h
 
 GET  /alerts
 POST /alerts
@@ -62,8 +62,8 @@ DELETE /alerts/:id
 Socket: 
 
 ```
-subscribe/unsubscribe {sympol}
-price:update          {sympol, price, timestamp}
+subscribe/unsubscribe {symbol}
+price:update          {symbol, price, timestamp}
 alert:triggered       the alert that fired
 ```
 
@@ -132,7 +132,7 @@ so anything longer just serves a window that's visibly behind the live price. At
 it collapses repeat requests inside one tick, but it's doing less than it was. Hits and misses get logged so you  
 can watch it. 
 
-**Alerts.** Pick a sympol, above or below a price. The server checks armed alerts on every tick and pushes the  
+**Alerts.** Pick a symbol, above or below a price. The server checks armed alerts on every tick and pushes the  
 alert down the socket, so it fires even on symbols you're not subscribed to. 
 Fires once and stays fired with the price that triggered it,  
 otherwise it would spam every 2 seconds while the price sits on the threshold. 
