@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { io, type Socket } from 'socket.io-client'
 import { MARKET_EVENTS } from '@trading-dashboard/contracts'
 import type {
+  Alert,
   ClientToServerEvents,
   PriceUpdate,
   ServerToClientEvents,
@@ -17,6 +18,7 @@ export function useMarketSocket(symbol: string | null) {
   const [prices, setPrices] = useState<Record<string, PriceUpdate>>({})
   const [connected, setConnected] = useState(false)
   const [rejected, setRejected] = useState(false)
+  const [firedAlerts, setFiredAlerts] = useState<Alert[]>([])
 
   useEffect(() => {
     const socket: MarketSocket = io(API_URL, {
@@ -44,8 +46,11 @@ export function useMarketSocket(symbol: string | null) {
     })
 
     socket.on(MARKET_EVENTS.priceUpdate, (tick) => {
-      console.log('tick', tick)
       setPrices((current) => ({ ...current, [tick.symbol]: tick }))
+    })
+
+    socket.on(MARKET_EVENTS.alertTriggered, (alert) => {
+      setFiredAlerts((current) => [...current, alert])
     })
 
     return () => {
@@ -71,5 +76,5 @@ export function useMarketSocket(symbol: string | null) {
     }
   }, [symbol])
 
-  return { prices, connected, rejected }
+  return { prices, connected, rejected, firedAlerts }
 }
