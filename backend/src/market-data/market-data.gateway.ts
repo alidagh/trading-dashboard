@@ -71,7 +71,11 @@ export class MarketDataGateway
     );
 
     void client.join(ticker.symbol);
-    client.emit(MARKET_EVENTS.priceUpdate, this.priceTick(ticker.symbol));
+    client.emit(MARKET_EVENTS.priceUpdate, {
+      symbol: ticker.symbol,
+      price: ticker.lastPrice,
+      timestamp: Date.now(),
+    });
 
     this.openStram(ticker.symbol);
   }
@@ -127,11 +131,10 @@ export class MarketDataGateway
     this.streams.set(symbol, stream);
   }
 
-  // Replays the seeded price until the random simulator is implemented.
   private priceTick(symbol: string): PriceUpdate {
     return {
       symbol,
-      price: this.tickers.findBySymbol(symbol)?.lastPrice ?? 0,
+      price: this.tickers.advance(symbol) ?? 0,
       timestamp: Date.now(),
     };
   }
