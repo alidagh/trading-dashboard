@@ -435,9 +435,23 @@
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  padding: 0.45rem 0;
+  padding: 0.45rem 0.5rem;
   border-top: 1px solid var(--border-soft);
+  border-left: 2px solid transparent;
+  border-radius: 4px;
   font-size: 0.8rem;
+}
+
+.alert-list li.fired {
+  border-left-color: var(--down);
+  background: rgba(229, 72, 77, 0.09);
+  animation: alert-flash 1.2s ease-out;
+}
+
+@keyframes alert-flash {
+  from {
+    background: rgba(229, 72, 77, 0.45);
+  }
 }
 
 .alert-symbol {
@@ -463,6 +477,11 @@
   font-size: 0.72rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+}
+
+.alert-status.fired {
+  color: var(--down);
+  font-weight: 600;
 }
 
 .alert-list button {

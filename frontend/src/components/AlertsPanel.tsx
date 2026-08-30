@@ -66,12 +66,15 @@ export function AlertsPanel({ symbol, price, firedAlerts }: Props) {
   }
 
   const armed = alerts.filter((alert) => alert.status === 'armed').length
+  const fired = alerts.length - armed
 
   return (
     <section className="alerts">
       <header className="alerts-head">
         <h2>Price alerts</h2>
-        <span className="alerts-count">{armed} armed</span>
+        <span className="alerts-count">
+          {armed} armed{fired > 0 && ` · ${fired} fired`}
+        </span>
       </header>
 
       <form className="alert-form" onSubmit={onSubmit}>
@@ -108,13 +111,13 @@ export function AlertsPanel({ symbol, price, firedAlerts }: Props) {
 
       <ul className="alert-list">
         {alerts.map((alert) => (
-          <li key={alert.id}>
+          <li key={alert.id} className={alert.status}>
             <span className="alert-symbol">{alert.symbol}</span>
             <span className={`alert-level ${alert.direction}`}>
               {alert.direction === 'above' ? '▲' : '▼'}{' '}
               {alert.threshold.toFixed(2)}
             </span>
-            <span className="alert-status">
+            <span className={`alert-status ${alert.status}`}>
               {alert.status === 'fired'
                 ? `fired at ${alert.firedPrice?.toFixed(2)}`
                 : 'armed'}
